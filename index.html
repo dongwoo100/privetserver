@@ -1,9 +1,12 @@
-
 <!DOCTYPE html>
 <html lang="ko">
 <head>
   <meta charset="UTF-8">
-  <title>링크 공유 사이트</title>
+  <title>안전한 링크 공유 사이트</title>
+  <style>
+    #notification { color: red; margin-top: 10px; }
+    input, button { margin: 5px 0; }
+  </style>
 </head>
 <body>
   <h2>관리자 / 사용자</h2>
@@ -14,20 +17,21 @@
   <div id="adminBox" style="display: none; margin-top:20px;">
     <h3>관리자 모드</h3>
     <input type="text" id="linkInput" placeholder="링크를 입력하세요">
-    <button onclick="saveLink()">저장</button>
+    <button onclick="saveLinkSafe()">저장</button>
+    <p id="adminStatus"></p>
   </div>
 
   <!-- 사용자 모드 -->
   <div id="userBox" style="display: none; margin-top:20px;">
     <h3>사용자 모드</h3>
     <p id="linkOutput"></p>
+    <p id="notification"></p>
   </div>
 
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-    import { getFirestore, doc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+    import { getFirestore, doc, runTransaction, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
-    // 🔑 Firebase 설정 (당신이 준 값 그대로 사용)
     const firebaseConfig = {
       apiKey: "AIzaSyChzlfGLJkeVAnBmGnhfvku4nNUUT-itA8",
       authDomain: "project-3314602679791876808.firebaseapp.com",
@@ -39,78 +43,76 @@
 
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
+    let lastUrl = "";
 
-    let lastUrl = ""; // 🔑 이전 링크 저장
-
-    // 코드 확인
     function checkCode() {
       let code = document.getElementById("codeInput").value.trim();
       if (code === "AP12389VX23") {
-        // 관리자 모드
         document.getElementById("adminBox").style.display = "block";
         document.getElementById("userBox").style.display = "none";
       } else if (code === "AP12389VX12") {
-        // 사용자 모드
         document.getElementById("adminBox").style.display = "none";
         document.getElementById("userBox").style.display = "block";
-        listenForLink(); // 🔥 실시간 리스너 실행
+        listenForLink();
       } else {
         alert("코드가 틀렸습니다!");
       }
     }
 
-    // 관리자: 링크 저장
-    async function saveLink() {
-      let link = document.getElementById("linkInput").value;
+    // 안전하게 링크 저장 (편집 충돌 방지)
+    async function saveLinkSafe() {
+      const link = document.getElementById("linkInput").value.trim();
       if (!link) {
         alert("링크를 입력하세요!");
         return;
       }
 
-      // 1) 편집중 상태 먼저 저장
-      await setDoc(doc(db, "links", "main"), { status: "editing" });
-
-      // 2) 링크 저장 + 완료 상태
-      await setDoc(doc(db, "links", "main"), {
-        url: link,
-        status: "ready",
-        updated: Date.now()
-      });
-
-      alert("링크가 저장되었습니다!");
+      const docRef = doc(db, "links", "main");
+      try {
+        await runTransaction(db, async (transaction) => {
+          const docSnap = await transaction.get(docRef);
+          if (!docSnap.exists()) {
+            transaction.set(docRef, { url: link, status: "ready", updated: Date.now() });
+          } else if (docSnap.data().status === "editing") {
+            throw "다른 관리자가 편집 중입니다!";
+          } else {
+            transaction.update(docRef, { url: link, status: "ready", updated: Date.now() });
+          }
+        });
+        document.getElementById("adminStatus").innerText = "링크가 안전하게 저장되었습니다!";
+      } catch (e) {
+        document.getElementById("adminStatus").innerText = e;
+      }
     }
 
-    // 사용자: 실시간 구독
     function listenForLink() {
       const docRef = doc(db, "links", "main");
       onSnapshot(docRef, (docSnap) => {
+        const linkOutput = document.getElementById("linkOutput");
+        const notification = document.getElementById("notification");
+
         if (docSnap.exists()) {
           const data = docSnap.data();
           if (data.status === "editing") {
-            document.getElementById("linkOutput").innerText =
-              "관리자가 링크를 수정 중입니다. 잠시만 기다려주세요...";
+            linkOutput.innerText = "관리자가 링크를 수정 중입니다. 잠시만 기다려주세요...";
           } else if (data.status === "ready") {
-            document.getElementById("linkOutput").innerHTML =
-              `<a href="${data.url}" target="_blank">${data.url}</a>`;
+            linkOutput.innerHTML = `<a href="${data.url}" target="_blank">${data.url}</a>`;
 
-            // 🔔 새 링크일 경우 알림
             if (data.url !== lastUrl) {
               if (lastUrl !== "") {
-                alert("새 링크로 업데이트 되었습니다!");
+                notification.innerText = "새 링크로 업데이트 되었습니다!";
               }
               lastUrl = data.url;
             }
           }
         } else {
-          document.getElementById("linkOutput").innerText =
-            "아직 관리자가 링크를 저장하지 않았습니다.";
+          linkOutput.innerText = "아직 관리자가 링크를 저장하지 않았습니다.";
         }
       });
     }
 
-    // HTML 버튼 연결
     window.checkCode = checkCode;
-    window.saveLink = saveLink;
+    window.saveLinkSafe = saveLinkSafe;
   </script>
 </body>
 </html>
