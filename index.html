@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <title>링크 공유 사이트</title>
+</head>
+<body>
+  <h2>관리자 / 사용자</h2>
+  <input type="text" id="codeInput" placeholder="코드를 입력하세요">
+  <button onclick="checkCode()">확인</button>
+
+  <!-- 관리자 화면 -->
+  <div id="adminBox" style="display:none; margin-top:20px;">
+    <h3>관리자 모드</h3>
+    <input type="text" id="linkInput" placeholder="링크를 입력하세요">
+    <button onclick="saveLink()">저장</button>
+  </div>
+
+  <!-- 사용자 화면 -->
+  <div id="userBox" style="display:none; margin-top:20px;">
+    <h3>사용자 모드</h3>
+    <p id="linkOutput"></p>
+  </div>
+
+  <script type="module">
+    // Firebase SDK 가져오기
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+    import { getFirestore, doc, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+    // 🔑 firebaseConfig (당신이 준 코드 그대로 사용)
+    const firebaseConfig = {
+      apiKey: "AIzaSyChzlfGLJkeVAnBmGnhfvku4nNUUT-itA8",
+      authDomain: "project-3314602679791876808.firebaseapp.com",
+      projectId: "project-3314602679791876808",
+      storageBucket: "project-3314602679791876808.firebasestorage.app",
+      messagingSenderId: "769556028377",
+      appId: "1:769556028377:web:3eebfc16e61b45dddbd7c8"
+    };
+
+    // Firebase 초기화
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+
+    // 코드 확인
+    function checkCode() {
+      let code = document.getElementById("codeInput").value;
+      if (code === "AP12389VX23") { // 관리자 코드
+        document.getElementById("adminBox").style.display = "block";
+        document.getElementById("userBox").style.display = "none";
+      } else if (code === "AP12389VX12") { // 사용자 코드
+        document.getElementById("adminBox").style.display = "none";
+        document.getElementById("userBox").style.display = "block";
+        loadLink();
+      } else {
+        alert("코드가 틀렸습니다!");
+      }
+    }
+
+    // 관리자: 링크 저장
+    async function saveLink() {
+      let link = document.getElementById("linkInput").value;
+      if (link) {
+        await setDoc(doc(db, "links", "main"), { url: link, updated: Date.now() });
+        alert("링크가 저장되었습니다!");
+      } else {
+        alert("링크를 입력하세요!");
+      }
+    }
+
+    // 사용자: 링크 불러오기
+    async function loadLink() {
+      const docRef = doc(db, "links", "main");
+      const docSnap = await getDoc(docRef);
+      if (docSnap.exists()) {
+        let link = docSnap.data().url;
+        document.getElementById("linkOutput").innerHTML =
+          `<a href="${link}" target="_blank">${link}</a>`;
+      } else {
+        document.getElementById("linkOutput").innerText =
+          "아직 관리자가 링크를 저장하지 않았습니다.";
+      }
+    }
+  </script>
+</body>
+</html>
