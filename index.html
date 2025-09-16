@@ -58,7 +58,7 @@
 
     // 관리자: 링크 저장
     async function saveLink() {
-      let link = document.getElementById("linkInput").value;
+      let link = document.getElementById("linkInput").value.trim();
       if (link) {
         await setDoc(doc(db, "links", "main"), { url: link, updated: Date.now() });
         alert("링크가 저장되었습니다!");
