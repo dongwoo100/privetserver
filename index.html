@@ -9,12 +9,14 @@
   <input type="text" id="codeInput" placeholder="코드를 입력하세요">
   <button onclick="checkCode()">확인</button>
 
+  <!-- 관리자 모드 -->
   <div id="adminBox" style="display: none; margin-top:20px;">
     <h3>관리자 모드</h3>
     <input type="text" id="linkInput" placeholder="링크를 입력하세요">
     <button onclick="saveLink()">저장</button>
   </div>
 
+  <!-- 사용자 모드 -->
   <div id="userBox" style="display: none; margin-top:20px;">
     <h3>사용자 모드</h3>
     <p id="linkOutput"></p>
@@ -22,8 +24,9 @@
 
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-    import { getFirestore, doc, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+    import { getFirestore, doc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
+    // 🔑 Firebase 설정 (당신이 준 값 그대로 사용)
     const firebaseConfig = {
       apiKey: "AIzaSyChzlfGLJkeVAnBmGnhfvku4nNUUT-itA8",
       authDomain: "project-3314602679791876808.firebaseapp.com",
@@ -36,55 +39,77 @@
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
 
-    // 함수 정의
+    let lastUrl = ""; // 🔑 이전 링크 저장
+
+    // 코드 확인
     function checkCode() {
       let code = document.getElementById("codeInput").value.trim();
-      console.log("입력된 코드:", code);
       if (code === "AP12389VX23") {
+        // 관리자 모드
         document.getElementById("adminBox").style.display = "block";
         document.getElementById("userBox").style.display = "none";
       } else if (code === "AP12389VX12") {
+        // 사용자 모드
         document.getElementById("adminBox").style.display = "none";
         document.getElementById("userBox").style.display = "block";
-        loadLink();
+        listenForLink(); // 🔥 실시간 리스너 실행
       } else {
         alert("코드가 틀렸습니다!");
       }
     }
 
+    // 관리자: 링크 저장
     async function saveLink() {
       let link = document.getElementById("linkInput").value;
       if (!link) {
         alert("링크를 입력하세요!");
         return;
       }
-      await setDoc(doc(db, "links", "main"), { url: link, updated: Date.now() });
+
+      // 1) 편집중 상태 먼저 저장
+      await setDoc(doc(db, "links", "main"), { status: "editing" });
+
+      // 2) 링크 저장 + 완료 상태
+      await setDoc(doc(db, "links", "main"), {
+        url: link,
+        status: "ready",
+        updated: Date.now()
+      });
+
       alert("링크가 저장되었습니다!");
     }
 
-    async function loadLink() {
-      try {
-        const docRef = doc(db, "links", "main");
-        const docSnap = await getDoc(docRef);
+    // 사용자: 실시간 구독
+    function listenForLink() {
+      const docRef = doc(db, "links", "main");
+      onSnapshot(docRef, (docSnap) => {
         if (docSnap.exists()) {
-          const link = docSnap.data().url;
-          document.getElementById("linkOutput").innerHTML =
-            `<a href="${link}" target="_blank">${link}</a>`;
+          const data = docSnap.data();
+          if (data.status === "editing") {
+            document.getElementById("linkOutput").innerText =
+              "관리자가 링크를 수정 중입니다. 잠시만 기다려주세요...";
+          } else if (data.status === "ready") {
+            document.getElementById("linkOutput").innerHTML =
+              `<a href="${data.url}" target="_blank">${data.url}</a>`;
+
+            // 🔔 새 링크일 경우 알림
+            if (data.url !== lastUrl) {
+              if (lastUrl !== "") {
+                alert("새 링크로 업데이트 되었습니다!");
+              }
+              lastUrl = data.url;
+            }
+          }
         } else {
           document.getElementById("linkOutput").innerText =
             "아직 관리자가 링크를 저장하지 않았습니다.";
         }
-      } catch (err) {
-        console.error("링크 불러오기 실패", err);
-        document.getElementById("linkOutput").innerText =
-          "링크를 불러오는 중 에러가 발생했습니다.";
-      }
+      });
     }
 
-    // 아래 두 줄로 HTML의 onclick이 인식하게 함
+    // HTML 버튼 연결
     window.checkCode = checkCode;
     window.saveLink = saveLink;
-    window.loadLink = loadLink;
   </script>
 </body>
 </html>
